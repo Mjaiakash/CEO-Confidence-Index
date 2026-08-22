@@ -1,32 +1,38 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
 from functools import lru_cache
-from transformers import pipeline
+
+import numpy as np
+
+from config import FINBERT_MODEL
+from preprocessing.clean_text import split_sentences
+
+
+@dataclass(frozen=True)
+class SentimentResult:
+    positive: float
+    negative: float
+    neutral: float
+    polarity: float
+    sentences_analyzed: int
 
 
 @lru_cache(maxsize=1)
-def get_classifier():
-    return pipeline("text-classification", model="ProsusAI/finbert", tokenizer="ProsusAI/finbert")
+def _classifier():
+    from transformers import pipeline
+    return pipeline("text-classification", model=FINBERT_MODEL, tokenizer=FINBERT_MODEL, truncation=True, max_length=512)
 
 
-def analyze_sentiment(text: str, max_sentences: int = 200) -> dict:
-    sentences = [s.strip() for s in text.split(".") if len(s.strip()) >= 20]
-    sentences = sentences[:max_sentences]
+def analyze_sentiment(text: str, max_sentences: int = 250) -> SentimentResult:
+    sentences = split_sentences(text)[:max_sentences]
     if not sentences:
-        return {"label": "neutral", "score": 0.0, "positive": 0.0, "negative": 0.0, "neutral": 1.0, "sentences": 0}
-
-    classifier = get_classifier()
-    predictions = classifier(sentences, truncation=True, max_length=512)
-    weighted = {"positive": 0.0, "negative": 0.0, "neutral": 0.0}
-    for prediction in predictions:
-        weighted[prediction["label"]] += float(prediction["score"])
-
-    n = len(predictions)
-    averages = {key: value / n for key, value in weighted.items()}
-    label = max(averages, key=averages.get)
-    return {
-        "label": label,
-        "score": round(averages[label], 4),
-        "positive": round(averages["positive"], 4),
-        "negative": round(averages["negative"], 4),
-        "neutral": round(averages["neutral"], 4),
-        "sentences": n,
-    }
+        return SentimentResult(0.0, 0.0, 0.0, 0.0, 0)
+    outputs = _classifier()(sentences, batch_size=8)
+    positive = [item["score"] for item in outputs if item["label"].lower() == "positive"]
+    negative = [item["score"] for item in outputs if item["label"].lower() == "negative"]
+    neutral = [item["score"] for item in outputs if item["label"].lower() == "neutral"]
+    p = float(np.mean(positive)) if positive else 0.0
+    n = float(np.mean(negative)) if negative else 0.0
+    z = float(np.mean(neutral)) if neutral else 0.0
+    return SentimentResult(p, n, z, p - n, len(sentences))
