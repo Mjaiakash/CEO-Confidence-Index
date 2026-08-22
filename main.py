@@ -1,14 +1,10 @@
-from database.database import engine
-from database.schema import initialize_database
-from config import REPORT_DIR, TRANSCRIPT_DIR, PROCESSED_DIR, OUTPUT_DIR
+from __future__ import annotations
 
-
-def main():
-    initialize_database(engine)
-    for directory in (REPORT_DIR, TRANSCRIPT_DIR, PROCESSED_DIR, OUTPUT_DIR):
-        directory.mkdir(parents=True, exist_ok=True)
-    print("CEO Confidence Index initialized successfully.")
+from database.database import init_db
+from scraper.registry import write_registry
 
 
 if __name__ == "__main__":
-    main()
+    init_db()
+    path = write_registry()
+    print(f"Initialized database and wrote {path}")
