@@ -1,45 +1,77 @@
 # CEO Confidence Index
 
-A Python/NLP financial analytics project that analyzes annual reports and earnings-call transcripts of leading Indian listed companies to estimate management confidence over time.
+An end-to-end NLP and financial text analytics project that analyzes annual reports and earnings-call transcripts of major Indian listed companies to estimate management confidence over time.
 
-## Core capabilities
+## What it measures
 
-- Financial document ingestion
-- PDF text extraction
-- Financial sentiment analysis with FinBERT
-- Keyword tracking for AI, inflation, expansion, CapEx and risk
-- Topic modeling with BERTopic
-- CEO Confidence Index scoring
-- Streamlit dashboard
-- SQLite storage
-- Automated tests with GitHub Actions
+- Positive vs. negative financial sentiment
+- AI and automation mentions
+- Inflation and cost-pressure mentions
+- Expansion and capacity language
+- Capital expenditure (CapEx) language
+- Risk and uncertainty language
+- A transparent 0–100 CEO Confidence Score
 
-## Project status
+## Architecture
 
-This repository contains the initial production-oriented scaffold. The data directory intentionally contains no copyrighted annual reports; use publicly available reports from the relevant company investor-relations pages.
+```text
+Annual reports / transcripts
+          |
+          v
+PDF/text ingestion
+          |
+          v
+Cleaning + section extraction
+          |
+          +------> Keyword engine
+          |
+          +------> FinBERT sentiment
+          |
+          v
+Confidence scoring
+          |
+          v
+CSV / Excel outputs
+          |
+          v
+Streamlit dashboard
+```
 
 ## Local setup
 
 ```bash
 python -m venv .venv
-# Windows: .venv\\Scripts\\activate
-# macOS/Linux: source .venv/bin/activate
+source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
 pip install -r requirements.txt
 python main.py
+```
+
+For local FinBERT use, install the spaCy model as well:
+
+```bash
+python -m spacy download en_core_web_sm
+```
+
+Add public-company annual report PDFs to `data/raw/annual_reports/` using filenames such as:
+
+```text
+Reliance_2024.pdf
+TCS_2024.pdf
+Infosys_2024.pdf
+```
+
+Then run:
+
+```bash
+python preprocessing/process_reports.py
+python run_analysis.py
 streamlit run dashboard/app.py
 ```
 
-## Data workflow
+## Important research note
 
-1. Add annual-report PDFs to `data/annual_reports/`.
-2. Run `python process_reports.py` to extract and clean report text.
-3. Run `python run_analysis.py` to calculate NLP metrics.
-4. Start the dashboard with `streamlit run dashboard/app.py`.
+The confidence formula in `nlp/confidence.py` is a transparent baseline heuristic for portfolio/research use. It is not a validated investment signal and should not be treated as financial advice. For a research paper, calibrate the index against an independently defined outcome and run robustness tests.
 
-## Confidence methodology
+## Data policy
 
-The score is a research proxy rather than an investment recommendation. It combines document sentiment with normalized signals from expansion, CapEx and AI language, while penalizing inflation and risk language. For serious research, validate the scoring weights against historical management guidance and market outcomes.
-
-## License
-
-MIT
+Do not commit third-party annual reports or transcripts to this repository. Store local source files under the ignored `data/raw/` directories and retain source URLs/metadata separately.
