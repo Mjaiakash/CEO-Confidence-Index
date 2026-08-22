@@ -1,0 +1,14 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.env
+ceo_confidence.db
+logs/*.log
+data/annual_reports/*.pdf
+data/transcripts/*
+data/processed/*
+data/outputs/*
+.streamlit/secrets.toml
+.DS_Store
