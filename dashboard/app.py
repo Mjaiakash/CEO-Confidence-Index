@@ -1,5 +1,14 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# Streamlit Cloud executes dashboard/app.py directly, so the repository root
+# is not guaranteed to be on sys.path. Add it explicitly before project imports.
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -31,18 +40,39 @@ c4.metric("Avg. polarity", f"{filtered['polarity'].mean():.3f}")
 
 trend = filtered.sort_values("year")
 if not trend.empty:
-    st.plotly_chart(px.line(trend, x="year", y="confidence", color="company", markers=True, title="CEO confidence over time"), use_container_width=True)
+    st.plotly_chart(
+        px.line(
+            trend,
+            x="year",
+            y="confidence",
+            color="company",
+            markers=True,
+            title="CEO confidence over time",
+        ),
+        use_container_width=True,
+    )
 
 left, right = st.columns(2)
 with left:
     mention_cols = ["AI", "Inflation", "Expansion", "CapEx", "Risk"]
     mentions = filtered[mention_cols].sum().sort_values(ascending=False).reset_index()
     mentions.columns = ["theme", "mentions"]
-    st.plotly_chart(px.bar(mentions, x="theme", y="mentions", title="Strategic theme mentions"), use_container_width=True)
+    st.plotly_chart(
+        px.bar(mentions, x="theme", y="mentions", title="Strategic theme mentions"),
+        use_container_width=True,
+    )
 with right:
-    sentiment = filtered[["positive", "negative", "neutral"]].mean().sort_values(ascending=False).reset_index()
+    sentiment = (
+        filtered[["positive", "negative", "neutral"]]
+        .mean()
+        .sort_values(ascending=False)
+        .reset_index()
+    )
     sentiment.columns = ["sentiment", "score"]
-    st.plotly_chart(px.bar(sentiment, x="sentiment", y="score", title="Average sentiment mix"), use_container_width=True)
+    st.plotly_chart(
+        px.bar(sentiment, x="sentiment", y="score", title="Average sentiment mix"),
+        use_container_width=True,
+    )
 
 st.subheader("Underlying analysis")
 st.dataframe(filtered.sort_values(["year", "company"]), use_container_width=True)
