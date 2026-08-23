@@ -17,9 +17,12 @@ from config import OUTPUT_DIR, REPORT_DIR, PROCESSED_DIR
 from nlp.confidence import calculate_confidence
 from nlp.keywords import keyword_frequency
 from nlp.sentiment import analyze_sentiment
-from preprocessing.cleaner import clean_text
-from preprocessing.parser import extract_text
+from preprocessing.clean_text import clean_text
+from preprocessing.pdf_parser import extract_text
 from preprocessing.process_reports import parse_metadata
+
+DEFAULT_REPORT = ROOT_DIR / "data" / "default" / "annual-report-2025-2026.pdf"
+DEFAULT_DISPLAY_NAME = "TCS Integrated Annual Report 2025–26"
 
 st.set_page_config(page_title="CEO Confidence Index", page_icon="📈", layout="wide")
 
@@ -27,16 +30,9 @@ st.title("CEO Confidence Index")
 st.caption("NLP-based analysis of management language in Indian company disclosures.")
 
 
-def analyze_uploaded_pdf(uploaded_file: Any) -> dict:
-    """Persist and analyze one uploaded PDF without requiring a Git commit."""
-    safe_name = Path(uploaded_file.name).name
-    pdf_path = REPORT_DIR / safe_name
-    pdf_path.write_bytes(uploaded_file.getvalue())
-
+def analyze_pdf_path(pdf_path: Path, display_name: str | None = None) -> dict:
+    """Analyze one PDF and return dashboard metrics."""
     text = clean_text(extract_text(pdf_path))
-    processed_path = PROCESSED_DIR / f"{pdf_path.stem}.txt"
-    processed_path.write_text(text, encoding="utf-8")
-
     company, year = parse_metadata(pdf_path)
     sentiment = analyze_sentiment(text)
     keywords = keyword_frequency(text)
@@ -55,41 +51,68 @@ def analyze_uploaded_pdf(uploaded_file: Any) -> dict:
         "Expansion": keywords["Expansion"],
         "CapEx": keywords["CapEx"],
         "Risk": keywords["Risk"],
-        "filename": safe_name,
+        "filename": display_name or pdf_path.name,
     }
 
 
 def persist_result(row: dict) -> None:
-    """Append/replace a dashboard record in the deployed app's writable storage."""
+    """Append/replace one record in writable app storage."""
     csv_path = OUTPUT_DIR / "confidence_index.csv"
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     existing = pd.read_csv(csv_path) if csv_path.exists() else pd.DataFrame()
     incoming = pd.DataFrame([row])
     combined = pd.concat([existing, incoming], ignore_index=True)
-
-    if "filename" in combined.columns:
-        combined = combined.drop_duplicates(subset=["filename"], keep="last")
-
+    combined = combined.drop_duplicates(subset=["filename"], keep="last")
     combined.to_csv(csv_path, index=False)
 
 
+def ensure_default_report() -> None:
+    """Make the bundled TCS FY2025-26 report the default dashboard document."""
+    if not DEFAULT_REPORT.exists():
+        return
+
+    csv_path = OUTPUT_DIR / "confidence_index.csv"
+    try:
+        current = pd.read_csv(csv_path) if csv_path.exists() else pd.DataFrame()
+    except Exception:
+        current = pd.DataFrame()
+
+    if "filename" in current.columns and DEFAULT_DISPLAY_NAME in current["filename"].astype(str).tolist():
+        return
+
+    try:
+        result = analyze_pdf_path(DEFAULT_REPORT, DEFAULT_DISPLAY_NAME)
+        persist_result(result)
+    except Exception as exc:
+        st.warning(f"The default report could not be analyzed yet: {exc}")
+
+
+ensure_default_report()
+
 with st.sidebar:
-    st.header("Upload reports")
-    st.write("Upload annual-report PDFs directly from your phone or computer.")
+    st.header("Report selection")
+    st.success("Default document loaded")
+    st.caption(DEFAULT_DISPLAY_NAME)
+
+    st.divider()
+    st.subheader("Use another report")
     uploads = st.file_uploader(
-        "Choose PDF files",
+        "Upload PDF",
         type=["pdf"],
         accept_multiple_files=True,
-        help="Use filenames such as TCS_2024.pdf so the app can infer company and year.",
+        help="Upload another annual report whenever you want to change or expand the analysis set.",
     )
 
-    if st.button("Analyze uploaded reports", type="primary", disabled=not uploads):
+    if st.button("Analyze uploaded report(s)", type="primary", disabled=not uploads):
         progress = st.progress(0.0)
         errors: list[str] = []
 
         for index, uploaded in enumerate(uploads):
             try:
-                result = analyze_uploaded_pdf(uploaded)
+                safe_name = Path(uploaded.name).name
+                pdf_path = REPORT_DIR / safe_name
+                pdf_path.write_bytes(uploaded.getvalue())
+                result = analyze_pdf_path(pdf_path, safe_name)
                 persist_result(result)
             except Exception as exc:
                 errors.append(f"{uploaded.name}: {exc}")
@@ -99,21 +122,17 @@ with st.sidebar:
             for error in errors:
                 st.error(error)
         else:
-            st.success(f"Analyzed {len(uploads)} report(s).")
+            st.success(f"Analyzed {len(uploads)} uploaded report(s).")
         st.rerun()
 
 csv_path = OUTPUT_DIR / "confidence_index.csv"
-
 if not csv_path.exists():
-    st.info(
-        "No analysis results yet. Upload one or more annual-report PDFs in the sidebar "
-        "and click **Analyze uploaded reports**."
-    )
+    st.info("The default report is being prepared. Refresh the page if this message remains.")
     st.stop()
 
 df = pd.read_csv(csv_path)
 if df.empty:
-    st.info("The analysis file is empty. Upload a report to begin.")
+    st.info("No analysis records are available yet.")
     st.stop()
 
 companies = ["All"] + sorted(df["company"].dropna().unique().tolist())
@@ -126,8 +145,8 @@ c2.metric("Companies", filtered["company"].nunique())
 c3.metric("Avg. confidence", f"{filtered['confidence'].mean():.1f}")
 c4.metric("Avg. polarity", f"{filtered['polarity'].mean():.3f}")
 
-trend = filtered.sort_values("year")
-if not trend.empty:
+if not filtered.empty and filtered["year"].notna().any():
+    trend = filtered.sort_values("year")
     st.plotly_chart(
         px.line(
             trend,
@@ -150,17 +169,16 @@ with left:
         use_container_width=True,
     )
 with right:
-    sentiment = (
-        filtered[["positive", "negative", "neutral"]]
-        .mean()
-        .sort_values(ascending=False)
-        .reset_index()
-    )
+    sentiment = filtered[["positive", "negative", "neutral"]].mean().sort_values(ascending=False).reset_index()
     sentiment.columns = ["sentiment", "score"]
     st.plotly_chart(
         px.bar(sentiment, x="sentiment", y="score", title="Average sentiment mix"),
         use_container_width=True,
     )
 
-st.subheader("Underlying analysis")
-st.dataframe(filtered.sort_values(["year", "company"], na_position="last"), use_container_width=True)
+st.subheader("Documents in the index")
+st.dataframe(
+    filtered.sort_values(["year", "company"], na_position="last"),
+    use_container_width=True,
+    hide_index=True,
+)
