@@ -1,4 +1,4 @@
-from preprocessing.process_reports import process_reports
+from preprocessing.process_reports import parse_metadata, process_reports
 
 
 if __name__ == "__main__":
