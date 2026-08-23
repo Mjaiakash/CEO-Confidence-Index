@@ -19,7 +19,7 @@ from nlp.keywords import keyword_frequency
 from nlp.sentiment import analyze_sentiment
 from preprocessing.cleaner import clean_text
 from preprocessing.parser import extract_text
-from process_reports import parse_metadata
+from preprocessing.process_reports import parse_metadata
 
 st.set_page_config(page_title="CEO Confidence Index", page_icon="📈", layout="wide")
 
@@ -37,7 +37,7 @@ def analyze_uploaded_pdf(uploaded_file: Any) -> dict:
     processed_path = PROCESSED_DIR / f"{pdf_path.stem}.txt"
     processed_path.write_text(text, encoding="utf-8")
 
-    company, year = parse_metadata(pdf_path.name)
+    company, year = parse_metadata(pdf_path)
     sentiment = analyze_sentiment(text)
     keywords = keyword_frequency(text)
     confidence = calculate_confidence(sentiment, keywords)
